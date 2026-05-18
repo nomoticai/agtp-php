@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  agtp-php-sdk:
+    name: agtp-php SDK on PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - name: Composer install
+        working-directory: agtp-php
+        run: composer install --no-interaction --prefer-dist
+      - name: PHPUnit
+        working-directory: agtp-php
+        run: vendor/bin/phpunit --colors=never
+
+  mod-php-runtime:
+    name: mod_php runtime on PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - name: Composer install
+        working-directory: mod_php
+        run: composer install --no-interaction --prefer-dist
+      - name: PHPUnit
+        working-directory: mod_php
+        run: vendor/bin/phpunit --colors=never

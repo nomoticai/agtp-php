@@ -35,5 +35,8 @@
             "type": "path",
             "url": "../agtp-php"
         }
-    ]
+    ],
+    "scripts": {
+        "test": "phpunit --colors=always"
+    }
 }

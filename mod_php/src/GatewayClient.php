@@ -67,26 +67,57 @@ final class GatewayClient
         $this->stop = true;
     }
 
+    /**
+     * Detect TCP-form ``host:port`` versus filesystem-form Unix socket.
+     *
+     * Public for testing; the caller normally passes the raw string
+     * through to the constructor. A target is TCP if and only if it
+     * matches the shape ``host:port`` where ``port`` is a decimal
+     * 1-65535 with no path separator following. Anything else — including
+     * paths that happen to contain a colon (rare on Linux, but legal) —
+     * is treated as a Unix socket path.
+     */
+    public static function isTcpTarget(string $target): bool
+    {
+        // Explicit tcp:// scheme — always TCP.
+        if (str_starts_with($target, 'tcp://')) {
+            return true;
+        }
+        // Explicit unix:// scheme — always Unix socket.
+        if (str_starts_with($target, 'unix://')) {
+            return false;
+        }
+        // Anything containing a slash is a filesystem path.
+        if (str_contains($target, '/') || str_contains($target, '\\')) {
+            return false;
+        }
+        // Otherwise, accept host:port shape where port is a real port.
+        $colonPos = strrpos($target, ':');
+        if ($colonPos === false) {
+            return false;
+        }
+        $portPart = substr($target, $colonPos + 1);
+        if (!ctype_digit($portPart)) {
+            return false;
+        }
+        $port = (int) $portPart;
+        return $port >= 1 && $port <= 65535;
+    }
+
     // ----- Internals -----
 
     private function connect(): void
     {
-        // Decide transport: "host:port" → TCP, anything else → Unix socket.
-        if (preg_match('/^[\d.]+(?::|:\[)?\d+$/', $this->socketPath) || str_starts_with($this->socketPath, '127.0.0.1:')) {
-            [$host, $port] = explode(':', $this->socketPath, 2);
-            $this->sock = @stream_socket_client(
-                "tcp://{$host}:{$port}",
-                $errno,
-                $errstr,
-                5.0,
-            );
+        if (self::isTcpTarget($this->socketPath)) {
+            $target = str_starts_with($this->socketPath, 'tcp://')
+                ? $this->socketPath
+                : 'tcp://' . $this->socketPath;
+            $this->sock = @stream_socket_client($target, $errno, $errstr, 5.0);
         } else {
-            $this->sock = @stream_socket_client(
-                "unix://" . $this->socketPath,
-                $errno,
-                $errstr,
-                5.0,
-            );
+            $target = str_starts_with($this->socketPath, 'unix://')
+                ? $this->socketPath
+                : 'unix://' . $this->socketPath;
+            $this->sock = @stream_socket_client($target, $errno, $errstr, 5.0);
         }
         if ($this->sock === false || $this->sock === null) {
             throw new ModuleException(

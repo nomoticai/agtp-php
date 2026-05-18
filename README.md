@@ -1,131 +1,135 @@
 # agtp-php
 
-The PHP stack for the [Agent Transfer Protocol][agtp] — handler-author
-library plus the gateway runtime module that connects to `agtpd`.
+The PHP foundation for AGTP — two Composer packages, one repository.
 
-Two Composer packages live side-by-side in this repository:
+| Package | Role |
+|---|---|
+| [`agtp/agtp-php`](agtp-php/) | The handler-author SDK. Defines `EndpointContext`, `EndpointResponse`, `EndpointError`, the `#[AgtpEndpoint]` attribute, the `HandlerRegistry`, the `ManifestExporter`, and the `Testing` helpers. |
+| [`agtp/mod-php`](mod_php/) | The runtime gateway client. Connects to `agtpd` over a Unix socket or TCP loopback, performs the handshake, dispatches request frames to handlers registered in the SDK. |
 
-| Directory  | Composer name      | What it is                                       |
-|------------|--------------------|--------------------------------------------------|
-| [`agtp-php/`](agtp-php/) | `agtp/agtp-php` | The handler-author API: `EndpointContext`, `EndpointResponse`, `EndpointError`, `#[AgtpEndpoint]`, `HandlerRegistry`, `Testing`. |
-| [`mod_php/`](mod_php/)   | `agtp/mod-php`  | The gateway runtime module. Connects to `agtpd` over a TCP/Unix socket and dispatches AGTP requests to handlers registered through `agtp-php`. |
+The SDK has zero AGTP dependencies. `mod-php` depends on the SDK.
+Framework connectors ([`agtp-symfony`](https://github.com/nomoticai/agtp-symfony),
+[`agtp-drupal`](https://github.com/nomoticai/agtp-drupal), and others)
+depend on both.
 
-They version together. Pinning `agtp/agtp-php: ^x.y` and
-`agtp/mod-php: ^x.y` to matching minors is the safe default.
+Both packages target PHP 8.1+ to match Drupal 10's floor.
 
-## Who uses which package
+## What is AGTP?
 
-- **You write a handler** → depend on `agtp/agtp-php` only. Your
-  framework integration (Drupal / Symfony / Laravel / WordPress)
-  pulls in `agtp/mod-php` transitively.
-- **You run the gateway worker** → `vendor/bin/run.php` from
-  `agtp/mod-php` (the framework integrations wrap this in their own
-  CLI command — `drush agtp:serve`, `bin/console agtp:serve`,
-  `php artisan agtp:serve`, `wp agtp serve`).
-- **You build a framework integration that doesn't exist yet** →
-  depend on both packages and use them directly.
+The Agent Transfer Protocol — an open protocol designed to move
+agent traffic the way SMTP moves email and HTTP moves documents.
+AGTP runs on its own port (4480) via a daemon called `agtpd`, with
+cryptographic identity, scope-based authority, and signed attribution
+as protocol-level primitives.
 
-## Framework integrations
+Specifications live at [github.com/nomoticai/agtp](https://github.com/nomoticai/agtp).
 
-Each integration lives in its own repository so a site only pulls
-the framework it actually uses:
+This repository is the PHP-side implementation: what application code
+imports to author and serve AGTP endpoints.
 
-- [agtp-drupal][drupal] — Drupal 10.2+ / 11 module
-- [agtp-symfony][symfony] — Symfony 6.4 / 7 bundle
-- [agtp-laravel][laravel] — Laravel 10 / 11 package
-- [agtp-wordpress][wp] — WordPress 6.4+ plugin
+## Quick links
 
-## Quick start (no framework)
+- **Author handlers** → [agtp-php/README.md](agtp-php/README.md)
+- **Run the runtime** → [mod_php/README.md](mod_php/README.md)
+- **Drupal integration** → [agtp-drupal](https://github.com/nomoticai/agtp-drupal)
+- **Symfony integration** → [agtp-symfony](https://github.com/nomoticai/agtp-symfony)
+- **Standalone PHP** → see "Standalone usage" below
+
+## Repository layout
+
+```
+agtp-php/
+├── agtp-php/        # SDK — composer: agtp/agtp-php
+│   ├── src/
+│   ├── tests/
+│   └── composer.json
+├── mod_php/         # Runtime — composer: agtp/mod-php
+│   ├── bin/
+│   ├── src/
+│   ├── tests/
+│   └── composer.json
+└── README.md        # This file
+```
+
+The two packages publish to Packagist independently. Inside the repo
+they're wired with Composer path repositories so local development
+resolves `mod-php` → `agtp-php` without round-tripping through
+Packagist.
+
+## Standalone usage
+
+If you're not on Drupal, Symfony, Laravel, or another framework with
+a dedicated connector, you can run AGTP as a standalone PHP process.
 
 ```bash
+mkdir my-agtp-app && cd my-agtp-app
+composer init --name=me/my-agtp-app --no-interaction
 composer require agtp/agtp-php agtp/mod-php
 ```
 
+Write a handler:
+
 ```php
-// bootstrap.php
-require __DIR__ . '/vendor/autoload.php';
+// src/EchoHandler.php
+namespace MyApp;
 
 use Agtp\AgtpEndpoint;
 use Agtp\EndpointContext;
 use Agtp\EndpointResponse;
 
-#[AgtpEndpoint(method: 'QUERY', path: '/echo')]
-function echoHandler(EndpointContext $ctx): EndpointResponse
-{
-    return new EndpointResponse(body: ['echo' => $ctx->input['value'] ?? '']);
+final class EchoHandler {
+    #[AgtpEndpoint(method: 'QUERY', path: '/echo')]
+    public function echo(EndpointContext $ctx): EndpointResponse {
+        return new EndpointResponse(body: ['echo' => $ctx->input['value'] ?? '']);
+    }
 }
-
-\Agtp\HandlerRegistry::default()->registerFunction('echoHandler');
 ```
 
+Write a bootstrap script:
+
+```php
+// bootstrap.php
+require __DIR__ . '/vendor/autoload.php';
+\Agtp\HandlerRegistry::default()->registerClass(\MyApp\EchoHandler::class);
+```
+
+Run:
+
 ```bash
-# Start agtpd separately (TCP/4480), then run the worker:
-vendor/bin/run.php \
-    --gateway-socket /tmp/agtpd.sock \
+php vendor/bin/run.php \
+    --gateway-socket /var/run/agtpd/gateway.sock \
     --bootstrap bootstrap.php
 ```
 
-`agtpd` itself lives in the [AGTP spec repo][agtp] (Python reference
-implementation).
+## Performance: why a long-lived worker?
 
-## Repository layout
+AGTP handlers run inside a persistent worker process. The Composer
+autoloader, your handler classes, your framework's container (if any),
+and any state your handler caches at construction time are paid for
+**once** at worker startup. Every subsequent AGTP request reuses
+them.
 
-```
-agtp-php/                  agtp/agtp-php  (handler SDK)
-├── src/                   Public PHP API
-├── tests/                 PHPUnit unit tests
-├── composer.json
-└── README.md              ← detailed authoring guide
+This is the FastCGI/PHP-FPM model applied to a different protocol:
+nginx terminates HTTP, FPM serves long-lived PHP workers. Here, `agtpd`
+terminates AGTP and `mod_php` workers serve handler logic.
 
-mod_php/                   agtp/mod-php   (runtime module)
-├── src/                   Frame codec + GatewayClient
-├── bin/run.php            CLI entry point (composer-published as a bin)
-└── composer.json
-```
+For agent traffic — bursty, repetitive, hitting the same endpoints
+many times in sequence — the warm-process model is a substantial
+performance win over per-request bootstrapping.
 
-## Development
+## Testing
 
 ```bash
-git clone https://github.com/nomoticai/agtp-php
-cd agtp-php
+# Test the SDK
+cd agtp-php && composer install && composer test
 
-composer install --working-dir=agtp-php
-composer install --working-dir=mod_php
-
-# Unit tests for the SDK
-(cd agtp-php && composer test)
+# Test the runtime
+cd mod_php && composer install && composer test
 ```
 
-End-to-end coverage (agtpd ↔ mod_php ↔ handler) lives in the spec
-repo's `tests/test_gateway_e2e_php.py`. Point it at this checkout
-with:
+Both packages use PHPUnit 10. The SDK has zero runtime dependencies;
+`mod-php` depends only on the SDK.
 
-```bash
-export AGTP_MOD_PHP_DIR=$(pwd)/mod_php
-# or place this repo as a sibling of the spec repo as ../agtp-php
-```
+## License
 
-## Versioning
-
-The two packages publish on the same release cadence and share a
-single [`CHANGELOG.md`](agtp-php/CHANGELOG.md) in `agtp-php/`. The
-public API is versioned independently of the AGTP wire format and
-the gateway protocol — breaking changes wait for gateway protocol
-v2; additive minor bumps land freely.
-
-## Related
-
-- [AGTP spec repo][agtp] — protocol drafts (IETF), `agtpd` reference
-  daemon, cross-language conformance tests
-- [Gateway protocol v1][gateway] — wire-level contract between
-  `agtpd` and `mod_php`
-- [Python equivalent][agtp-python] — `agtp` package on PyPI; same
-  shape as `agtp/agtp-php`
-
-[agtp]: https://github.com/nomoticai/agtp
-[agtp-python]: https://github.com/nomoticai/agtp/tree/main/agtp
-[gateway]: https://github.com/nomoticai/agtp/blob/main/docs/architecture/gateway-protocol-v1.md
-[drupal]: https://github.com/nomoticai/agtp-drupal
-[symfony]: https://github.com/nomoticai/agtp-symfony
-[laravel]: https://github.com/nomoticai/agtp-laravel
-[wp]: https://github.com/nomoticai/agtp-wordpress
+MIT.

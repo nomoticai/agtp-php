@@ -1,0 +1,75 @@
+# =============================================================================
+# agtp-php — handler SDK + runtime module (Composer monorepo)
+# =============================================================================
+# Two Composer packages live side-by-side in this repo:
+#   agtp-php/  →  Packagist: agtp/agtp-php  (handler-author library)
+#   mod_php/   →  Packagist: agtp/mod-php   (gateway runtime module)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Secrets — never commit any of these, ever
+# -----------------------------------------------------------------------------
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.der
+*.gpg
+*.asc
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+
+# -----------------------------------------------------------------------------
+# Composer artifacts (per-package)
+# -----------------------------------------------------------------------------
+# Both packages publish as libraries, so composer.lock is gitignored —
+# downstream apps choose their own lock state.
+vendor/
+composer.lock
+.phpunit.result.cache
+.phpunit.cache/
+phpunit.xml.bak
+
+# PHPUnit coverage reports
+coverage/
+clover.xml
+
+# -----------------------------------------------------------------------------
+# Editor / IDE / agent tooling
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# -----------------------------------------------------------------------------
+# OS junk
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# -----------------------------------------------------------------------------
+# Local notes / scratchpads
+# -----------------------------------------------------------------------------
+NOTES.md
+TODO.md
+SCRATCH.md
+*.scratch
+*.local

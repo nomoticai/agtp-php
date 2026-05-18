@@ -1,9 +1,10 @@
 # agtp-php
 
-The PHP handler-author library for AGTP. Pairs with `mod_php` (the
-runtime module that connects to `agtpd` over the gateway socket).
+The PHP handler-author library for AGTP. Pairs with
+[`agtp/mod-php`][mod-php] (the runtime module that connects to
+`agtpd` over the gateway socket).
 
-The public API mirrors the Python library [`agtp`](../agtp/) so
+The public API mirrors the [Python `agtp` library][agtp-python] so
 authoring is identical across languages: three value classes, one
 attribute, one registry.
 
@@ -110,36 +111,53 @@ This library is only the authoring surface. To actually serve AGTP
 traffic, run `agtpd` with a gateway socket and connect `mod_php`:
 
 ```bash
-# Terminal 1: the daemon
+# Terminal 1: the daemon (Python reference implementation from the
+# spec repo — https://github.com/nomoticai/agtp)
 python -m server 4480 \
     --agents-dir server/agents \
     --endpoints-dir endpoints \
     --gateway-socket /tmp/agtpd.sock
 
-# Terminal 2: the PHP runtime module loading your handlers
-php mod_php/bin/run.php \
+# Terminal 2: the PHP runtime module loading your handlers.
+# vendor/bin/run.php ships with the agtp/mod-php Composer package.
+vendor/bin/run.php \
     --gateway-socket /tmp/agtpd.sock \
     --bootstrap path/to/your/bootstrap.php
 ```
 
 `bootstrap.php` is a small script that requires the autoloader and
-registers your handler classes. See
-[`samples/gateway_demo.php`](../samples/gateway_demo.php) for a
-worked example.
+registers your handler classes. See [`samples/gateway_demo.php`][sample]
+in the spec repo for a worked example.
+
+If you're working from a checkout of [this repo][repo], `mod_php` is
+the sibling directory — run `php ../mod_php/bin/run.php …` instead.
 
 ## Public-API contract
 
 The package versions independently of the AGTP wire format, the
 method catalog, and the gateway protocol. The frozen public surface
 is documented in [`CHANGELOG.md`](CHANGELOG.md) and validated against
-the canonical JSON Schemas in [`../core/schemas/`](../core/schemas/).
-Breaking changes wait for gateway protocol v2; additive minor bumps
-land freely.
+the [canonical JSON Schemas][schemas] in the spec repo. Breaking
+changes wait for gateway protocol v2; additive minor bumps land
+freely.
 
 ## Related
 
-- [`docs/architecture/server-modules.md`](../docs/architecture/server-modules.md)
-  — overall daemon/module/library architecture
-- [`docs/architecture/gateway-protocol-v1.md`](../docs/architecture/gateway-protocol-v1.md)
-  — wire-level contract between `agtpd` and `mod_php`
-- [`agtp/`](../agtp/) — Python equivalent of this library
+- [`agtp` spec repo][spec-repo] — protocol drafts (IETF), `agtpd`
+  reference daemon, cross-language conformance tests
+- [Server-modules architecture][arch] — overall daemon / module /
+  library layering
+- [Gateway protocol v1][gateway] — wire-level contract between
+  `agtpd` and `mod_php`
+- [Python `agtp`][agtp-python] — equivalent library on PyPI
+- [`agtp/mod-php`][mod-php] — the runtime module this library
+  pairs with
+
+[mod-php]: https://packagist.org/packages/agtp/mod-php
+[repo]: https://github.com/nomoticai/agtp-php
+[spec-repo]: https://github.com/nomoticai/agtp
+[arch]: https://github.com/nomoticai/agtp/blob/main/docs/architecture/server-modules.md
+[gateway]: https://github.com/nomoticai/agtp/blob/main/docs/architecture/gateway-protocol-v1.md
+[agtp-python]: https://pypi.org/project/agtp/
+[sample]: https://github.com/nomoticai/agtp/blob/main/samples/gateway_demo.php
+[schemas]: https://github.com/nomoticai/agtp/tree/main/core/schemas
